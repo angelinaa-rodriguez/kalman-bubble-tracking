@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from functools import wraps
 
 class Trial:
     def __init__(self, video_path):
@@ -44,9 +43,7 @@ class Trial:
         cv2.destroyAllWindows()
     
     
-    @staticmethod
     def for_all_frames(func):
-        @wraps(func)
         def wrapper(self, inplace=False, *args, **kwargs):
             out_frames = [func(self, frame, *args, **kwargs) for frame in self.frames]
 
@@ -59,6 +56,10 @@ class Trial:
         return wrapper
     
     
+    
+    ## TODO: Add an undo function
+    # def undo(self, frame):
+
     @for_all_frames
     def to_gray(self, frame):
         if frame.ndim == 2:
@@ -66,11 +67,30 @@ class Trial:
         self.is_gray = True
         return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
+    @for_all_frames
+    def gauss_blur(self, frame, ksize=(3,3), sigmaX=3, **kwargs):
+        return cv2.GaussianBlur(frame, ksize, sigmaX, **kwargs)
+    
+    @for_all_frames
+    def change_contrast(self, frame, alpha=1, beta=0):
+        return cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
+    
+    # @for_all_frames
+    # def detect_horizontal(self, frame, ksize=3):
+    #     return cv2.Sobel(frame, cv2.CV_64F, 0, 1, ksize=ksize)
 
     @for_all_frames
-    def gauss_blur(self, frame, ksize=(3,3), sigmaX=3):
-        return cv2.GaussianBlur(frame, ksize, sigmaX)
+    def detect_horizontal(self, frame, thresh1=50, thresh2=50):
+        return cv2.Canny(frame, thresh1, thresh2)
     
+    @for_all_frames
+    def crop_top(self, frame):
+        y = frame.shape[0]
+        y_min = (2 * y) // 5
+        if frame.ndim == 2:
+            return frame[y_min:, :]
+        else:
+            return frame[y_min:, :, :]
 
     
 

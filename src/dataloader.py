@@ -7,11 +7,12 @@ import functools
 
 class Trial:
     sharpening_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    UNDO_QUEUE_LENGTH = 3
 
     def __init__(self, video_path:str):
         self.frames = self.load_mov_as_array(video_path)
         self.__original = self.frames
+        # print(type(self.frames))
+        print(len(self.frames))
         self.shape = self.frames[0].shape
         self.__undo_list = []
         

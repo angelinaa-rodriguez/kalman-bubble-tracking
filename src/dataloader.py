@@ -12,7 +12,7 @@ class Trial:
     def __init__(self, video_path:str):
         self.frames = self.load_mov_as_array(video_path)
         self.__original = self.frames
-        self.shape = self[0].shape
+        self.shape = self.frames[0].shape
         self.__undo_list = []
         
 
@@ -62,9 +62,9 @@ class Trial:
     # @undoable
 
 
-    def for_all_frames(func):
+    def for_all_frames(func): 
         def wrapper(self, inplace=False, *args, **kwargs):
-            out_frames = [func(self, frame, *args, **kwargs) for frame in self.frames]
+            out_frames = [func(self, frame, *args, **kwargs) for frame in self.frames] #type:ignore
             if inplace:
                 self.frames = out_frames
                 return self
@@ -97,56 +97,87 @@ class Trial:
         self.shape = other.shape
         ## NOTE: This needs to be updated if other attributes are added
 
-    # @undoable
-    @for_all_frames
-    def median_blur(self, frame, ksize=(3,3)):
+
+    @for_all_frames  #type:ignore 
+    def median_blur(self, frame, ksize=3):
         return cv2.medianBlur(frame, ksize=ksize)
+    
+    @for_all_frames
+    def opening(self, frame, ksize=(3,3)):
+        return cv2.morphologyEx(frame, cv2.MORPH_OPEN, ksize)
+    
+
+    @for_all_frames
+    def graddd(self, frame, kernel=(3,3)):
+        return cv2.morphologyEx(frame, cv2.MORPH_GRADIENT, kernel)
+    
+    @for_all_frames
+    def closing(self, frame, ksize=(3,3)):
+        return cv2.morphologyEx(frame, cv2.MORPH_CLOSE, ksize)
+    
+    @for_all_frames
+    def dTrans(self, frame, tune=0.02):
+        dist = cv2.distanceTransform(frame, cv2.DIST_L2, 5)
+
+        # Normalize for easier threshold selection
+        dist_norm = cv2.normalize(dist, None, 0, 1.0, cv2.NORM_MINMAX)
+
+        # --- Threshold: pixels with distance > small value are inside ---
+        # Adjust 0.02–0.2 depending on how thick your outline is
+        return (dist_norm > tune).astype(np.uint8) * 255
 
 
     # @undoable
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def to_gray(self, frame):
         if frame.ndim == 2:
             return frame
         self.shape = self.shape[:2]
         return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def gauss_blur(self, frame, ksize=(3,3), sigmaX=3, **kwargs):
         return cv2.GaussianBlur(frame, ksize, sigmaX, **kwargs)
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def contour(self, frame, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE):
         return cv2.findContours(frame, mode, method)
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def change_contrast(self, frame, alpha=1, beta=0):
         return cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
     
     @for_all_frames
+    def normalize(self, frame):
+        out = np.zeros_like(frame)
+        cv2.normalize(frame, out, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
+        return out
+
+    
+    @for_all_frames  #type:ignore
     def dilate(self, frame, kernel=cv2.MORPH_ELLIPSE, ksize=(3,3)):
         element = cv2.getStructuringElement(kernel, ksize)
         return cv2.dilate(frame, element)
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def erode(self, frame, kernel=cv2.MORPH_ELLIPSE, ksize=(3,3)):
         element = cv2.getStructuringElement(kernel, ksize)
         return cv2.erode(frame, element)
 
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def edges(self, frame, thresh1=25, thresh2=100):
         return cv2.Canny(frame, thresh1, thresh2)
 
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def sharpen(self, frame, ddepth=-1):
         return cv2.filter2D(frame, ddepth=ddepth, kernel=self.sharpening_kernel)
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def connect_le_components(self, frame, connectivity=8, ltype=cv2.CV_32S):
         _, out = cv2.connectedComponents(frame, connectivity=connectivity, ltype=ltype)
         return out
     
-    @for_all_frames
+    @for_all_frames  #type:ignore
     def crop_top(self, frame):
         y = frame.shape[0]
         y_min = (2 * y) // 5
@@ -162,8 +193,9 @@ class Trial:
     def ranger(self, frame, minval, maxval):
         return cv2.inRange(frame, lowerb=minval, upperb=maxval)
     
-    @for_all_frames
+    @for_all_frames 
     def color_reduce(self, frame, K=4):
+        """Do not use. Wayyyy to computationally expensive"""
         Z = np.float32(frame.reshape((-1, 3)))
 
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
@@ -175,17 +207,24 @@ class Trial:
 
         return quantized
     
-    
-    def remove_avg(self):
 
-        img_avg = np.mean(self.frames, axis=0).astype('uint8')
+    def get_avg(self, skipframes=0, the_fake_one=True):
+        return np.mean(self.frames[skipframes:], axis=0).astype('uint8')
+    
+    
+    def remove_avg(self, skipframes=0, the_fake_one=True):
+        img_avg = self.get_avg(skipframes=skipframes, the_fake_one=the_fake_one)
         # img_avg = cv2.bitwise_not(img_avg)
         # self.show(img_avg)
         
         updated_frames = []
         for frame in self.frames:
             # frame = cv2.bitwise_not(frame)
-            frame = frame - img_avg
+            if the_fake_one:
+                frame = frame - img_avg 
+            else:
+                frame = cv2.absdiff(frame, img_avg)
+
             updated_frames.append(frame.astype('uint8'))
 
         self.frames = updated_frames
@@ -203,14 +242,13 @@ class Trial:
         if inplace:
             self.frames = out
         return out
-
         
         
     def create_overlay(self, other):
         other = self.__original
         L_out = []
         for frame in zip(other, self.frames):
-            overlay = c.deepcopy(frame[0])  # .copy()
+            overlay = c.deepcopy(frame[0])
             overlay[frame[1] > 0] = [0, 255, 0]
             L_out.append(overlay)
 
@@ -231,12 +269,14 @@ class Trial:
 
 
     def __getitem__(self, index):
-        return self.frames[index]
+        img = self.frames[index]
+        self.show(img)
+        return img
     
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Trial):
-            return TypeError
+            return TypeError  #type:ignore
         if self.shape != other.shape:
             return False
         

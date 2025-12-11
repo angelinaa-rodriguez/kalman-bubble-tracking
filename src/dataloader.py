@@ -11,10 +11,13 @@ class Trial:
     def __init__(self, video_path:str):
         self.frames = self.load_mov_as_array(video_path)
         self.__original = self.frames
-        # print(type(self.frames))
-        print(len(self.frames))
         self.shape = self.frames[0].shape
-        self.__undo_list = []
+
+
+    @classmethod
+    def saveImg(cls, img, name:str):
+        cv2.imwrite(f"../saved_imgs/{name}.png", img)
+
         
 
     def load_mov_as_array(self, video_path):
@@ -92,14 +95,19 @@ class Trial:
     def opening(self, frame, ksize=(3,3)):
         return cv2.morphologyEx(frame, cv2.MORPH_OPEN, ksize)
     
+    @for_all_frames
+    def replace(self, frame, img):
+        return img
+    
+
 
     @for_all_frames
     def graddd(self, frame, kernel=(3,3)):
         return cv2.morphologyEx(frame, cv2.MORPH_GRADIENT, kernel)
     
     @for_all_frames
-    def closing(self, frame, ksize=(3,3)):
-        return cv2.morphologyEx(frame, cv2.MORPH_CLOSE, ksize)
+    def closing(self, frame, ksize=(3,3), iterations=1):
+        return cv2.morphologyEx(frame, cv2.MORPH_CLOSE, ksize, iterations=iterations)
     
     @for_all_frames
     def dTrans(self, frame, tune=0.02):
@@ -194,14 +202,12 @@ class Trial:
         return quantized
     
 
-    def get_avg(self, skipframes=0, the_fake_one=True):
+    def get_avg(self, skipframes=0, the_fake_one=True) -> np.ndarray:
         return np.mean(self.frames[skipframes:], axis=0).astype('uint8')
     
     
     def remove_avg(self, skipframes=0, the_fake_one=True):
         img_avg = self.get_avg(skipframes=skipframes, the_fake_one=the_fake_one)
-        # img_avg = cv2.bitwise_not(img_avg)
-        # self.show(img_avg)
         
         updated_frames = []
         for frame in self.frames:
@@ -228,6 +234,28 @@ class Trial:
         if inplace:
             self.frames = out
         return out
+    
+
+    def combine_masks(self, other, inplace=False):
+        out = []
+        for frame in zip(self.frames, other.frames):
+            frameS, frameO = frame
+            maskS = np.bitwise_and(frameS, np.ones_like(frameS))
+            maskO = np.bitwise_and(frameO, np.ones_like(frameS))
+            multi_mask = (127/5*np.where(maskS==1, 2*maskS, maskO)).astype('uint8')
+            out.append(multi_mask)
+
+        if inplace:
+            self.frames = out
+        return out
+
+        
+
+    
+
+    @for_all_frames
+    def edge_blur(self, frame):
+        return cv2.edgePreservingFilter(frame)
         
         
     def create_overlay(self, other):
@@ -241,6 +269,7 @@ class Trial:
         self.frames = L_out
         return L_out
     
+    @classmethod
     def show(self, frame):
         cv2.imshow("Frame", frame)
         cv2.waitKey(0)
@@ -252,11 +281,13 @@ class Trial:
             out_img = cv2.addWeighted(out_img*i/(i+1), 0, self.frames[i]/(i+1), 1, 0)
         
         return out_img
+    
+
 
 
     def __getitem__(self, index):
         img = self.frames[index]
-        self.show(img)
+        Trial.show(img)
         return img
     
 

@@ -1,3 +1,58 @@
+# HMC Computer Vision Project: Kalman-Based Bubble Tracking
+
+> **Collaborative project with Thomas Wing**  
+> Built at Harvey Mudd College’s Flow Imaging Lab (FILM)
+
+This project explores computer vision and temporal tracking techniques to improve the detection and removal of air bubbles in underwater fin-motion videos. The work was motivated by real research needs in biomechanics and fluid-flow analysis, where bubbles interfere with downstream techniques such as Particle Image Velocimetry (PIV).
+
+---
+
+## Motivation
+
+When mechanical fins move underwater, they generate bubbles and air pockets that distort the surrounding flow. FILM researchers need to remove these air regions frame-by-frame so they can study water motion alone.
+
+While existing bubble detection pipelines (thresholding, background subtraction, morphology) work reasonably well, they fail when:
+- bubbles become transparent,
+- multiple bubbles overlap,
+- detections briefly disappear due to lighting or motion.
+
+These failures require extensive manual correction and don’t scale to long, high-resolution videos.
+
+Our goal was to **add temporal reasoning** to the pipeline so bubble detection could remain stable over time instead of treating each frame independently.
+
+---
+
+## Approach
+
+We combined classical computer vision with **Kalman filter–based tracking** to improve robustness across frames.
+
+### 1. Mask Optimizing Video Editor (MOVE)
+
+To rapidly experiment with filter pipelines, we built a lightweight Python video editor that:
+- loads `.mov` files using OpenCV,
+- applies filters across all frames via a decorator-based API,
+- allows fast visual inspection of intermediate results,
+- saves processed videos back to disk.
+
+This tool made it easy to prototype and tune filter sequences without rewriting code for every experiment.
+
+---
+
+### 2. Bubble & Fin Masking
+
+We implemented custom pipelines for:
+- **Waterline extraction** using grayscale conversion, frame averaging, Gaussian blurring, and k-means color quantization.
+- **Fin and bubble extraction** using background subtraction, contrast enhancement, thresholding, and median filtering.
+
+These steps produced first-pass masks that served as inputs to the tracking system.
+
+---
+
+### 3. Kalman Filter Tracking
+
+To stabilize bubble detection over time, we modeled each bubble using a **constant-velocity Kalman filter** with state: [x, y, vx, vy]
+
+
 
 At each frame, the tracker:
 1. Predicts the bubble’s next position.
